@@ -1,0 +1,20 @@
+[[source]]
+url = "https://pypi.python.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+gym = "*"
+tensorflow = "*"
+tensorboard = "*"
+
+[dev-packages]
+ipython = "*"
+pylint = "*"
+"autopep8" = "*"
+"flake8" = "*"
+pytest = "*"
+pandas = "*"
+
+[requires]
+python_version = "3.6"
