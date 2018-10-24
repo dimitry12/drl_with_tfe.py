@@ -232,10 +232,14 @@ def main():
                         tf.contrib.summary.scalar(
                             'batch_average_CLIP', pg_loss)
                         pg_loss = -pg_loss  # TF's optimizers minimize
+                        tf.contrib.summary.histogram('untrusted_p_ratio_clipped_off', tf.to_float(
+                            tf.greater(tf.abs(ratio-1.), CLIP_RANGE))*tf.abs(ratio-CLIP_RANGE))
 
                         v_pred_clipped = old_predicted_values_batch + \
                             tf.clip_by_value(
                                 train_v_logit - old_predicted_values_batch, - CLIP_RANGE, CLIP_RANGE)
+                        tf.contrib.summary.histogram('untrusted_v_diff_clipped_off', tf.abs(
+                            v_pred_clipped - train_v_logit))
                         v_f_losses1 = tf.square(train_v_logit - returns_batch)
                         tf.contrib.summary.scalar('batch_average_unclipped_v_loss',
                                                   tf.reduce_mean(v_f_losses1))
