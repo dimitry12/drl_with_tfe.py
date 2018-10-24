@@ -196,6 +196,8 @@ def main():
             predicted_values = np.asarray(predicted_values, dtype=np.float32)
             neg_log_p_ac_s = np.asarray(neg_log_p_ac_s, dtype=np.float32)
 
+            tf.contrib.summary.hist('GAEs', gae_s)
+
         with writer.as_default(), tf.contrib.summary.always_record_summaries():
             dataset = tf.data.Dataset.from_tensor_slices(
                 (observations, returns, taken_actions, predicted_values, neg_log_p_ac_s, gae_s))
