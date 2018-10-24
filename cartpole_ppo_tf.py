@@ -105,7 +105,7 @@ def main():
                     vector_to_tf_constant(observation))
                 p_distribution = tf.distributions.Categorical(logits=p_logits)
                 action = p_distribution.sample()
-                tf.contrib.summary.hist(
+                tf.contrib.summary.histogram(
                     'policy_probabilities', p_distribution.probs)
                 neg_log_p_ac = tf.nn.sparse_softmax_cross_entropy_with_logits(
                     logits=p_logits, labels=action)
@@ -196,7 +196,7 @@ def main():
             predicted_values = np.asarray(predicted_values, dtype=np.float32)
             neg_log_p_ac_s = np.asarray(neg_log_p_ac_s, dtype=np.float32)
 
-            tf.contrib.summary.hist('GAEs', gae_s)
+            tf.contrib.summary.histogram('GAEs', gae_s)
 
         with writer.as_default(), tf.contrib.summary.always_record_summaries():
             dataset = tf.data.Dataset.from_tensor_slices(
