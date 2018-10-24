@@ -105,6 +105,7 @@ def main():
                     vector_to_tf_constant(observation))
                 p_distribution = tf.distributions.Categorical(logits=p_logits)
                 action = p_distribution.sample()
+                tf.contrib.summary.hist(p_distribution.probs)
                 neg_log_p_ac = tf.nn.sparse_softmax_cross_entropy_with_logits(
                     logits=p_logits, labels=action)
 
