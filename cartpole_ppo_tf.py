@@ -15,7 +15,9 @@ np.random.seed(RANDOM_SEED)
 random.seed(RANDOM_SEED)
 
 MLP_UNITS = 16
-MLP_EXTRA_LAYERS = 3
+MLP_LAYERS = 1  # one shared hidden layer between V and P
+P_MLP_LAYERS = 0  # policy network is linear
+V_MLP_LAYERS = 1  # V network is "deep"
 
 TRANSITIONS_IN_EXPERIENCE_BUFFER = 1024
 GRADIENT_LEARNING_BATCH_SIZE = 32
@@ -36,16 +38,26 @@ TF_LOGS_DIR = './tf-logs/' + datetime.datetime.now().strftime("%Y-%m-%d %H%M%S")
 
 
 class P_and_V_Model(tf.keras.Model):
-    def __init__(self, *, classes, mlp_extra_layers=MLP_EXTRA_LAYERS, mlp_units=MLP_UNITS, heads='pv'):
+    def __init__(self, *, classes, mlp_layers=MLP_LAYERS, mlp_units=MLP_UNITS, heads='pv', v_mlp_layers=V_MLP_LAYERS, p_mlp_layers=P_MLP_LAYERS):
+        assert mlp_layers > 0  # need at least one layer
         super(P_and_V_Model, self).__init__(name="P_and_V_Model")
         # interestingly, model *must* be named if we use named layers
         # (Keras 2.1.6-tf)
         self._outputs = heads
-        self.dense = tf.keras.layers.Dense(mlp_units, activation='tanh')
+        self.dense = tf.keras.layers.Dense(
+            mlp_units, activation='tanh', name='first_shared_layer')
         self.hidden_denses = []
-        for _ in range(mlp_extra_layers):
+        for _ in range(mlp_layers - 1):
             self.hidden_denses.append(tf.keras.layers.Dense(
-                mlp_units, activation='tanh'))
+                mlp_units, activation='tanh', name='shared_hidden_layer' + str(_)))
+        self.v_hidden_denses = []
+        for _ in range(v_mlp_layers):
+            self.v_hidden_denses.append(tf.keras.layers.Dense(
+                mlp_units, activation='tanh', name='v_hidden_layer' + str(_)))
+        self.p_hidden_denses = []
+        for _ in range(v_mlp_layers):
+            self.p_hidden_denses.append(tf.keras.layers.Dense(
+                mlp_units, activation='tanh', name='p_hidden_layer' + str(_)))
         self.p_outputs = tf.keras.layers.Dense(
             classes, activation=None, name='p_logits')
         self.v_output = tf.keras.layers.Dense(
@@ -56,8 +68,16 @@ class P_and_V_Model(tf.keras.Model):
         for l in self.hidden_denses:
             shared_latent = l(shared_latent)
 
-        p_logits = self.p_outputs(shared_latent)
-        v_logit = self.v_output(shared_latent)
+        v_latent = shared_latent
+        for l in self.v_hidden_denses:
+            v_latent = l(v_latent)
+
+        p_latent = shared_latent
+        for l in self.p_hidden_denses:
+            p_latent = l(p_latent)
+
+        p_logits = self.p_outputs(p_latent)
+        v_logit = self.v_output(v_latent)
 
         if self._outputs == 'p':
             return p_logits

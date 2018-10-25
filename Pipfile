@@ -15,6 +15,7 @@ pylint = "*"
 "flake8" = "*"
 pytest = "*"
 pandas = "*"
+pydot = "*"
 
 [requires]
 python_version = "3.6"
