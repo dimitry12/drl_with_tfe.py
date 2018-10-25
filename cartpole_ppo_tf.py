@@ -102,6 +102,9 @@ def main():
 
     learner_updates = int(TOTAL_ENV_STEPS // TRANSITIONS_IN_EXPERIENCE_BUFFER)
 
+    observation: np.ndarray = env.reset()
+    episode_done: bool = False
+
     for learner_update in range(1, learner_updates+1):
         with rl_writer.as_default(), tf.contrib.summary.always_record_summaries():
             current_update_started_at = time.time()
@@ -111,8 +114,6 @@ def main():
 
             observations, rewards, taken_actions, predicted_values, neg_log_p_ac_s, episode_dones = [], [], [], [], [], []
 
-            observation: np.ndarray = env.reset()
-            episode_done: bool = False
             reward: float
             steps_in_current_episode = 0
             total_reward_in_current_episode = 0
