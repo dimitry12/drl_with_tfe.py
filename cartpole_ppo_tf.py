@@ -19,9 +19,13 @@ MLP_LAYERS = 1  # one shared hidden layer between V and P
 P_MLP_LAYERS = 0  # policy network is linear
 V_MLP_LAYERS = 1  # V network is "deep"
 
-TRANSITIONS_IN_EXPERIENCE_BUFFER = 1024
+# the dimensionality for all these is: "MDP state transitions" (not observational frames)
 GRADIENT_LEARNING_BATCH_SIZE = 32
+TRANSITIONS_IN_EXPERIENCE_BUFFER = 1024
+HORIZON = 1024
 assert TRANSITIONS_IN_EXPERIENCE_BUFFER % GRADIENT_LEARNING_BATCH_SIZE == 0
+TOTAL_ENV_STEPS = 2e7
+
 EPOCHS_PER_UPDATE = 4
 
 CLIP_RANGE = .2
@@ -31,9 +35,6 @@ MAX_GRAD_NORM = .5
 VALUE_LOSS_WEIGHT = .25
 LR = 3e-4
 
-TOTAL_ENV_STEPS = 2e7
-
-import datetime
 TF_LOGS_DIR = './tf-logs/' + datetime.datetime.now().strftime("%Y-%m-%d %H%M%S")
 
 
