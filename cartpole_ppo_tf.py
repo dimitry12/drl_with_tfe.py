@@ -266,12 +266,10 @@ def main():
                                 train_v_logit - old_predicted_values_batch, - CLIP_RANGE, CLIP_RANGE)
                         tf.contrib.summary.histogram('untrusted_v_diff_clipped_off', tf.abs(
                             v_pred_clipped - train_v_logit))
-                        v_f_losses1 = tf.square(
-                            train_v_logit - v_targets_batch)
+                        v_f_losses1 = tf.square(train_v_logit - v_targets_batch)
                         tf.contrib.summary.scalar('batch_average_unclipped_v_loss',
                                                   tf.reduce_mean(v_f_losses1))
-                        v_f_losses2 = tf.square(
-                            v_pred_clipped - v_targets_batch)
+                        v_f_losses2 = tf.square(v_pred_clipped - v_targets_batch)
                         # See several scenarios:
                         #
                         # 1) R.....O.C..V
