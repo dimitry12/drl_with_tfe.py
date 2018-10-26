@@ -185,7 +185,7 @@ def main():
 
             predicted_values = np.asarray(predicted_values, dtype=np.float32)
             gae_s = np.zeros_like(rewards, dtype=np.float32)
-            returns = np.zeros_like(rewards, dtype=np.float32)
+            v_targets = np.zeros_like(rewards, dtype=np.float32)
             # tail_of_gae  is lambda-discounted sum of per-slice surprises. We learn from surprises!
             # tail_of_returns is gamma-discounted sum of per-transition rewards (policy-value)
             for t in reversed(range(TRANSITIONS_IN_EXPERIENCE_BUFFER)):
@@ -209,26 +209,28 @@ def main():
                         next_slice_v_logit - predicted_values[t]
 
                 gae_s[t] = td_residual + GAMMA * ADVANTAGE_LAMBDA * tail_of_gae
-                returns[t] = rewards[t] + GAMMA*tail_of_returns
+                v_targets[t] = rewards[t] + GAMMA*tail_of_returns
                 tail_of_gae = gae_s[t]
-                tail_of_returns = returns[t]
+                tail_of_returns = v_targets[t]
 
             observations = np.asarray(observations, dtype=np.float32)
             taken_actions = np.asarray(taken_actions, dtype=np.int64)
             predicted_values = np.asarray(predicted_values, dtype=np.float32)
             neg_log_p_ac_s = np.asarray(neg_log_p_ac_s, dtype=np.float32)
+            v_targets = gae_s + predicted_values
+            # v_targets = np.zeros_like(rewards, dtype=np.float32) # learns, looks unstable
 
             tf.contrib.summary.histogram('GAEs', gae_s)
 
         with writer.as_default(), tf.contrib.summary.always_record_summaries():
             dataset = tf.data.Dataset.from_tensor_slices(
-                (observations, returns, taken_actions, predicted_values, neg_log_p_ac_s, gae_s))
+                (observations, v_targets, taken_actions, predicted_values, neg_log_p_ac_s, gae_s))
             dataset = dataset.shuffle(
                 EPOCHS_PER_UPDATE*TRANSITIONS_IN_EXPERIENCE_BUFFER).batch(GRADIENT_LEARNING_BATCH_SIZE)
             v_losses = []
             for _ in range(EPOCHS_PER_UPDATE):
                 for batch_number, dataset_batch in enumerate(dataset):
-                    observations_batch, returns_batch, old_taken_actions_batch, old_predicted_values_batch, old_neg_log_p_ac_s_batch, advantages_batch = dataset_batch
+                    observations_batch, v_targets_batch, old_taken_actions_batch, old_predicted_values_batch, old_neg_log_p_ac_s_batch, advantages_batch = dataset_batch
 
                     with tf.GradientTape() as tape:
                         train_p_logits, train_v_logit = pv_model(
@@ -262,10 +264,12 @@ def main():
                                 train_v_logit - old_predicted_values_batch, - CLIP_RANGE, CLIP_RANGE)
                         tf.contrib.summary.histogram('untrusted_v_diff_clipped_off', tf.abs(
                             v_pred_clipped - train_v_logit))
-                        v_f_losses1 = tf.square(train_v_logit - returns_batch)
+                        v_f_losses1 = tf.square(
+                            train_v_logit - v_targets_batch)
                         tf.contrib.summary.scalar('batch_average_unclipped_v_loss',
                                                   tf.reduce_mean(v_f_losses1))
-                        v_f_losses2 = tf.square(v_pred_clipped - returns_batch)
+                        v_f_losses2 = tf.square(
+                            v_pred_clipped - v_targets_batch)
                         # See several scenarios:
                         #
                         # 1) R.....O.C..V
