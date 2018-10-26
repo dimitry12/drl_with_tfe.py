@@ -9,6 +9,7 @@ tf.enable_eager_execution()
 
 
 RANDOM_SEED = 42
+RENDER = False
 
 tf.set_random_seed(RANDOM_SEED)
 np.random.seed(RANDOM_SEED)
@@ -142,7 +143,8 @@ def main():
                 observation, reward, episode_done, infos = env.step(
                     action.numpy()[0])
                 rewards.append(reward)
-                env.render()
+                if (RENDER):
+                    env.render()
 
                 if episode_done:
                     observation = env.reset()
