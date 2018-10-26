@@ -5,15 +5,10 @@ import random
 import numpy as np
 import tensorflow as tf
 import tensorflow.contrib.eager as tfe
-tf.enable_eager_execution()
-
 
 RANDOM_SEED = 42
 RENDER = False
 
-tf.set_random_seed(RANDOM_SEED)
-np.random.seed(RANDOM_SEED)
-random.seed(RANDOM_SEED)
 
 MLP_UNITS = 16
 MLP_LAYERS = 1  # one shared hidden layer between V and P
@@ -90,6 +85,12 @@ class P_and_V_Model(tf.keras.Model):
 
 
 def main():
+    tf.enable_eager_execution()
+
+    tf.set_random_seed(RANDOM_SEED)
+    np.random.seed(RANDOM_SEED)
+    random.seed(RANDOM_SEED)
+
     env = gym.make('CartPole-v0')
     writer = tf.contrib.summary.create_file_writer(TF_LOGS_DIR)
     rl_writer = tf.contrib.summary.create_file_writer(TF_LOGS_DIR + 'rl')
@@ -106,6 +107,7 @@ def main():
 
     observation: np.ndarray = env.reset()
     episode_done: bool = False
+    total_reward = 0
 
     for learner_update in range(1, learner_updates+1):
         with rl_writer.as_default(), tf.contrib.summary.always_record_summaries():
@@ -143,6 +145,7 @@ def main():
                 observation, reward, episode_done, infos = env.step(
                     action.numpy()[0])
                 rewards.append(reward)
+                total_reward += reward
                 if (RENDER):
                     env.render()
 
@@ -303,6 +306,7 @@ def main():
                       (time.time() - current_update_started_at))
 
             print("update: ", learner_update)
+            print("Hypers: ", GAMMA, ADVANTAGE_LAMBDA)
             print('episodes in update: ', episodes_in_current_update)
             print('average steps per episode: ', np.asarray(
                 steps_in_current_update).mean())
@@ -320,9 +324,16 @@ def main():
                 'total_frames', tf.constant(learner_update*TRANSITIONS_IN_EXPERIENCE_BUFFER))
             print("fps", fps)
 
+    print('Total reward:', total_reward)
+    return total_reward
+
 
 class RLEstimator():
-    params = ['ADVANTAGE_LAMBDA', 'GAMMA']
+    params_default = {
+        'ADVANTAGE_LAMBDA': .97,
+        'GAMMA': .99,
+        'TOTAL_ENV_STEPS': 2e7,
+    }
     params_values = {}
     score_ = None
 
@@ -333,17 +344,18 @@ class RLEstimator():
         return self.params_values
 
     def set_params(self, *args, **kwargs):
-        for param in self.params:
+        for param, param_default_value in self.params_default.items():
             if param in kwargs:
                 self.params_values[param] = kwargs[param]
             elif param in self.params_values:
                 pass
             else:
-                self.params_values[param] = globals()[param]
+                self.params_values[param] = param_default_value
 
     def fit(self, X):
-        self.score_ = self.params_values['ADVANTAGE_LAMBDA'] * \
-            self.params_values['GAMMA']
+        for param, param_value in self.params_values.items():
+            globals()[param] = param_value
+        self.score_ = main()
         return self
 
     def score(self, X):
@@ -351,4 +363,9 @@ class RLEstimator():
 
 
 if __name__ == '__main__':
+    # INITS_PER_HYPERSET = 2
+    # assert INITS_PER_HYPERSET % 2 == 0
+    # rle = RLEstimator()
+    # gs = GridSearchCV(me, {'GAMMA': [0.95,0.99], 'TOTAL_ENV_STEPS': [10_000]}, cv=INITS_PER_HYPERSET, n_jobs=2, refit=False)
+    # gs.fit([.0]*INITS_PER_HYPERSET)
     main()
