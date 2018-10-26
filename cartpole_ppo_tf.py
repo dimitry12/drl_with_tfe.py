@@ -321,5 +321,34 @@ def main():
             print("fps", fps)
 
 
+class RLEstimator():
+    params = ['ADVANTAGE_LAMBDA', 'GAMMA']
+    params_values = {}
+    score_ = None
+
+    def __init__(self, *args, **kwargs):
+        self.set_params(**kwargs)
+
+    def get_params(self, *args, **kwargs):
+        return self.params_values
+
+    def set_params(self, *args, **kwargs):
+        for param in self.params:
+            if param in kwargs:
+                self.params_values[param] = kwargs[param]
+            elif param in self.params_values:
+                pass
+            else:
+                self.params_values[param] = globals()[param]
+
+    def fit(self, X):
+        self.score_ = self.params_values['ADVANTAGE_LAMBDA'] * \
+            self.params_values['GAMMA']
+        return self
+
+    def score(self, X):
+        return self.score_
+
+
 if __name__ == '__main__':
     main()
