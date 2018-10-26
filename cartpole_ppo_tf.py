@@ -1,12 +1,12 @@
+import datetime
+import time
+import gym
+import random
+import numpy as np
 import tensorflow as tf
 import tensorflow.contrib.eager as tfe
 tf.enable_eager_execution()
 
-import numpy as np
-import random
-import gym
-
-import time
 
 RANDOM_SEED = 42
 
