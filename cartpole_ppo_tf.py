@@ -222,8 +222,15 @@ def main():
             taken_actions = np.asarray(taken_actions, dtype=np.int64)
             predicted_values = np.asarray(predicted_values, dtype=np.float32)
             neg_log_p_ac_s = np.asarray(neg_log_p_ac_s, dtype=np.float32)
+
+            # GAE is lambda-exponentially-weighted sum of:
+            # - k-step TD-residuals, and each of these is the difference of:
+            #   - k-step value-estimate, and
+            #   - baseline, which is policy-value of the current state
+            # Baseline is constant throughout the expression, therefore
+            # difference of GAE and baseline is lambda-exponentially-weighted
+            # sum of k-step value-estimates.
             v_targets = gae_s + predicted_values
-            # v_targets = np.zeros_like(rewards, dtype=np.float32) # learns, looks unstable
 
             tf.contrib.summary.histogram('GAEs', gae_s)
 
