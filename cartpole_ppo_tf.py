@@ -5,37 +5,12 @@ import random
 import numpy as np
 import tensorflow as tf
 import tensorflow.contrib.eager as tfe
-
-RANDOM_SEED = 42
-RENDER = False
-
-
-MLP_UNITS = 16
-MLP_LAYERS = 1  # one shared hidden layer between V and P
-P_MLP_LAYERS = 0  # policy network is linear
-V_MLP_LAYERS = 1  # V network is "deep"
-
-# the dimensionality for all these is: "MDP state transitions" (not observational frames)
-GRADIENT_LEARNING_BATCH_SIZE = 32
-TRANSITIONS_IN_EXPERIENCE_BUFFER = 1024
-HORIZON = 1024
-assert TRANSITIONS_IN_EXPERIENCE_BUFFER % GRADIENT_LEARNING_BATCH_SIZE == 0
-TOTAL_ENV_STEPS = 2e7
-
-EPOCHS_PER_UPDATE = 4
-
-CLIP_RANGE = .2
-GAMMA = .99
-ADVANTAGE_LAMBDA = .97
-MAX_GRAD_NORM = .5
-VALUE_LOSS_WEIGHT = .25
-LR = 3e-4
-
-TF_LOGS_DIR = './tf-logs/' + datetime.datetime.now().strftime("%Y-%m-%d %H%M%S")
+from sklearn.model_selection import GridSearchCV
+import pandas as pd
 
 
 class P_and_V_Model(tf.keras.Model):
-    def __init__(self, *, classes, mlp_layers=MLP_LAYERS, mlp_units=MLP_UNITS, heads='pv', v_mlp_layers=V_MLP_LAYERS, p_mlp_layers=P_MLP_LAYERS):
+    def __init__(self, classes, mlp_layers, mlp_units, v_mlp_layers, p_mlp_layers, heads='pv'):
         assert mlp_layers > 0  # need at least one layer
         super(P_and_V_Model, self).__init__(name="P_and_V_Model")
         # interestingly, model *must* be named if we use named layers
@@ -84,7 +59,27 @@ class P_and_V_Model(tf.keras.Model):
             return p_logits, v_logit
 
 
-def main():
+def main(*,
+         RANDOM_SEED,
+         RENDER,
+         MLP_UNITS,
+         MLP_LAYERS,
+         P_MLP_LAYERS,
+         V_MLP_LAYERS,
+         GRADIENT_LEARNING_BATCH_SIZE,
+         TRANSITIONS_IN_EXPERIENCE_BUFFER,
+         HORIZON,
+         TOTAL_ENV_STEPS,
+         EPOCHS_PER_UPDATE,
+         CLIP_RANGE,
+         GAMMA,
+         ADVANTAGE_LAMBDA,
+         MAX_GRAD_NORM,
+         VALUE_LOSS_WEIGHT,
+         LR,
+         TF_LOGS_DIR
+         ):
+    assert TRANSITIONS_IN_EXPERIENCE_BUFFER % GRADIENT_LEARNING_BATCH_SIZE == 0
     tf.enable_eager_execution()
 
     tf.set_random_seed(RANDOM_SEED)
@@ -92,15 +87,17 @@ def main():
     random.seed(RANDOM_SEED)
 
     env = gym.make('CartPole-v0')
-    writer = tf.contrib.summary.create_file_writer(TF_LOGS_DIR)
-    rl_writer = tf.contrib.summary.create_file_writer(TF_LOGS_DIR + 'rl')
+    log_dir_name = datetime.datetime.now().strftime("%Y-%m-%d %H%M%S")
+    writer = tf.contrib.summary.create_file_writer(log_dir_name)
+    rl_writer = tf.contrib.summary.create_file_writer(log_dir_name + 'rl')
     writer.set_as_default()
 
     # only works for Box
     observations_space_dim_count = env.observation_space.shape[0]
     action_space_cardinality = env.action_space.n  # only works for Discrete
 
-    pv_model = P_and_V_Model(classes=action_space_cardinality)
+    pv_model = P_and_V_Model(classes=action_space_cardinality, mlp_layers=MLP_LAYERS,
+                             mlp_units=MLP_UNITS, v_mlp_layers=V_MLP_LAYERS, p_mlp_layers=P_MLP_LAYERS)
     optimizer = tf.train.AdamOptimizer(learning_rate=LR, epsilon=1e-5)
 
     learner_updates = int(TOTAL_ENV_STEPS // TRANSITIONS_IN_EXPERIENCE_BUFFER)
@@ -108,6 +105,7 @@ def main():
     observation: np.ndarray = env.reset()
     episode_done: bool = False
     total_reward = 0
+    total_episodes = 0
 
     for learner_update in range(1, learner_updates+1):
         with rl_writer.as_default(), tf.contrib.summary.always_record_summaries():
@@ -152,6 +150,7 @@ def main():
                 if episode_done:
                     observation = env.reset()
                     episodes_in_current_update += 1
+                    total_episodes += 1
                     steps_in_current_update.append(steps_in_current_episode)
                     total_rewards_in_current_update.append(
                         total_reward_in_current_episode)
@@ -332,15 +331,40 @@ def main():
             print("fps", fps)
 
     print('Total reward:', total_reward)
-    return total_reward
+    print('Total episodes:', total_episodes)
+    return float(total_reward)/float(total_episodes)
+
+
+default_hyperparameters = {
+    'RANDOM_SEED': 42,
+    'RENDER': False,
+
+    'MLP_UNITS': 16,
+    'MLP_LAYERS': 1,  # one shared hidden layer between V and P
+    'P_MLP_LAYERS': 0,  # policy network is linear
+    'V_MLP_LAYERS': 1,  # V network is "deep"
+
+    # the dimensionality for all these is: "MDP state transitions" (not observational frames)
+    'GRADIENT_LEARNING_BATCH_SIZE': 32,
+    'TRANSITIONS_IN_EXPERIENCE_BUFFER': 1024,
+    'HORIZON': 1024,
+    'TOTAL_ENV_STEPS': 2e7,
+
+    'EPOCHS_PER_UPDATE': 4,
+
+    'CLIP_RANGE': .2,
+    'GAMMA': .99,
+    'ADVANTAGE_LAMBDA': .97,
+    'MAX_GRAD_NORM': .5,
+    'VALUE_LOSS_WEIGHT': .25,
+    'LR': 3e-4,
+
+    'TF_LOGS_DIR': './tf-logs/',
+}
 
 
 class RLEstimator():
-    params_default = {
-        'ADVANTAGE_LAMBDA': .97,
-        'GAMMA': .99,
-        'TOTAL_ENV_STEPS': 2e7,
-    }
+    params_default = default_hyperparameters
     params_values = {}
     score_ = None
 
@@ -360,9 +384,7 @@ class RLEstimator():
                 self.params_values[param] = param_default_value
 
     def fit(self, X):
-        for param, param_value in self.params_values.items():
-            globals()[param] = param_value
-        self.score_ = main()
+        self.score_ = main(**self.params_values)
         return self
 
     def score(self, X):
@@ -370,9 +392,15 @@ class RLEstimator():
 
 
 if __name__ == '__main__':
-    # INITS_PER_HYPERSET = 2
-    # assert INITS_PER_HYPERSET % 2 == 0
-    # rle = RLEstimator()
-    # gs = GridSearchCV(me, {'GAMMA': [0.95,0.99], 'TOTAL_ENV_STEPS': [10_000]}, cv=INITS_PER_HYPERSET, n_jobs=2, refit=False)
-    # gs.fit([.0]*INITS_PER_HYPERSET)
-    main()
+    # main(**default_hyperparameters)
+    INITS_PER_HYPERSET = 2
+    assert INITS_PER_HYPERSET % 2 == 0
+    rle = RLEstimator()
+    gs = GridSearchCV(rle, {
+        'GAMMA': [0.95, 0.99],
+        'ADVANTAGE_LAMBDA': [0.8],
+        'TOTAL_ENV_STEPS': [10_000],
+    }, cv=INITS_PER_HYPERSET, n_jobs=-1, refit=False)
+    gs.fit([.0]*INITS_PER_HYPERSET)
+    print(pd.DataFrame(gs.cv_results_).filter(
+        regex='^(param_)|(mean_test_score)'))
