@@ -205,7 +205,6 @@ def main(*, hparams):
             #   new episode.
 
             predicted_values = np.asarray(predicted_values, dtype=np.float32)
-            gae_s = calculate_gae(hparams=hparams, ADVANTAGE_LAMBDA=hparams['ADVANTAGE_LAMBDA'], rewards=rewards, episode_dones=episode_dones, predicted_values=predicted_values, episode_done=episode_done, last_v_logit=last_v_logit)
 
             # GAE is lambda-exponentially-weighted sum of:
             # - k-step TD-residuals, and each of these is the difference of:
@@ -214,7 +213,10 @@ def main(*, hparams):
             # Baseline is constant throughout the expression, therefore
             # sum of GAE and baseline is lambda-exponentially-weighted
             # sum of k-step value-estimates.
+            gae_s = calculate_gae(hparams=hparams, ADVANTAGE_LAMBDA=hparams['VALUE_LAMBDA'], rewards=rewards, episode_dones=episode_dones, predicted_values=predicted_values, episode_done=episode_done, last_v_logit=last_v_logit)
             v_targets = gae_s + predicted_values
+
+            gae_s = calculate_gae(hparams=hparams, ADVANTAGE_LAMBDA=hparams['ADVANTAGE_LAMBDA'], rewards=rewards, episode_dones=episode_dones, predicted_values=predicted_values, episode_done=episode_done, last_v_logit=last_v_logit)
 
             observations = np.asarray(observations, dtype=np.float32)
             for dim_i in range(0, observations_space_dim_count):
@@ -331,7 +333,7 @@ def main(*, hparams):
 
 
 default_hyperparameters = {
-    'VERSION': '0.1.0',
+    'VERSION': '1.1.0',
     'RANDOM_SEED': 42,
     'RENDER': True,
 
@@ -351,6 +353,7 @@ default_hyperparameters = {
     'CLIP_RANGE': .2,
     'GAMMA': .99,
     'ADVANTAGE_LAMBDA': .97,
+    'VALUE_LAMBDA': .99,
     'MAX_GRAD_NORM': .5,
     'VALUE_LOSS_WEIGHT': .25,
     'LR': 3e-4,
