@@ -205,6 +205,8 @@ def main(*, hparams):
             #   new episode.
 
             predicted_values = np.asarray(predicted_values, dtype=np.float32)
+            tf.contrib.summary.histogram(
+                'predicted_values_in_buffer', predicted_values)
 
             # GAE is lambda-exponentially-weighted sum of:
             # - k-step TD-residuals, and each of these is the difference of:
