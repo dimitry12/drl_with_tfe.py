@@ -7,6 +7,7 @@ import tensorflow as tf
 import tensorflow.contrib.eager as tfe
 from sklearn.model_selection import GridSearchCV
 import pandas as pd
+import namesgenerator
 import json
 
 
@@ -70,7 +71,10 @@ def main(*, hparams):
         random.seed(hparams['RANDOM_SEED'])
 
     env = gym.make('CartPole-v0')
-    log_dir_name = './tf-logs/' + datetime.datetime.now().strftime("%Y-%m-%d %H%M%S")
+    random_name = datetime.datetime.now().strftime("%Y%m%d%H%M") + '-' + namesgenerator.get_random_name()
+    with open('./tf-logs/' + random_name + 'hparams.json', 'a') as log:
+        log.write(json.dumps(hparams))
+    log_dir_name = './tf-logs/' + random_name + '-'
     writer = tf.contrib.summary.create_file_writer(log_dir_name)
     rl_writer = tf.contrib.summary.create_file_writer(log_dir_name + 'rl')
 

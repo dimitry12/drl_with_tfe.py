@@ -8,6 +8,7 @@ gym = "*"
 tensorflow = "*"
 tensorboard = "*"
 sklearn = "*"
+namesgenerator = "*"
 
 [dev-packages]
 ipython = "*"
