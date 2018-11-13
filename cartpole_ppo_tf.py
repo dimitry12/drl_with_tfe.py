@@ -221,7 +221,7 @@ def main(*, hparams):
             #   - k-step value-estimate, and
             #   - baseline, which is policy-value of the current state
             # Baseline is constant throughout the expression, therefore
-            # difference of GAE and baseline is lambda-exponentially-weighted
+            # sum of GAE and baseline is lambda-exponentially-weighted
             # sum of k-step value-estimates.
             v_targets = gae_s + predicted_values
 
@@ -243,9 +243,9 @@ def main(*, hparams):
                         neg_log_p_ac = tf.nn.sparse_softmax_cross_entropy_with_logits(
                             logits=train_p_logits, labels=old_taken_actions_batch)
 
-                        # Only care about how proximate the new policy is
+                        # Only care about how proximate the updated policy is
                         # relative to the probability of the *taken* action.
-                        # New policy may offer very different distribution
+                        # Updated policy may offer very different distribution
                         # over untaken actions.
                         ratio = tf.exp(old_neg_log_p_ac_s_batch - neg_log_p_ac)
                         pg_losses = advantages_batch * ratio
