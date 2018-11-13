@@ -101,7 +101,7 @@ def main(*, hparams):
 
     env = gym.make('CartPole-v0')
     random_name = datetime.datetime.now().strftime("%Y%m%d%H%M") + '-' + namesgenerator.get_random_name()
-    with open('./tf-logs/' + random_name + 'hparams.json', 'a') as log:
+    with open('./tf-logs/' + random_name + '.hparams.json', 'a') as log:
         log.write(json.dumps(hparams))
     log_dir_name = './tf-logs/' + random_name + '-'
     writer = tf.contrib.summary.create_file_writer(log_dir_name)
@@ -375,6 +375,7 @@ class RLEstimator():
     params_default = default_hyperparameters
     params_values = {}
     score_ = None
+    _flushed_score = False
 
     def __init__(self, *args, **kwargs):
         self.set_params(**kwargs)
@@ -396,8 +397,10 @@ class RLEstimator():
         return self
 
     def score(self, X):
-        with open('score.log', 'a') as log:
-            log.write(json.dumps({'score': self.score_, **self.params_values}))
+        if not self._flushed_score:
+            self._flushed_score = True
+            with open('score.log', 'a') as log:
+                log.write(json.dumps({'score': self.score_, **self.params_values}) + "\n")
         return self.score_
 
 
@@ -408,8 +411,8 @@ if __name__ == '__main__':
     assert INITS_PER_HYPERSET % 2 == 0
     rle = RLEstimator()
     gs = GridSearchCV(rle, {
-        'RENDER': False,
-        'RANDOM_SEEED': False,
+        'RENDER': [False],
+        'RANDOM_SEEED': [False],
         'GAMMA': [0.95, 0.99],
         'ADVANTAGE_LAMBDA': [0.8],
         'TOTAL_ENV_STEPS': [10_000],
