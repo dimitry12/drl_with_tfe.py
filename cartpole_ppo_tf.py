@@ -73,7 +73,6 @@ def main(*, hparams):
     log_dir_name = './tf-logs/' + datetime.datetime.now().strftime("%Y-%m-%d %H%M%S")
     writer = tf.contrib.summary.create_file_writer(log_dir_name)
     rl_writer = tf.contrib.summary.create_file_writer(log_dir_name + 'rl')
-    writer.set_as_default()
 
     # only works for Box
     observations_space_dim_count = env.observation_space.shape[0]
