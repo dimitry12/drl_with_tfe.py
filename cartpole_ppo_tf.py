@@ -87,7 +87,7 @@ def main(*,
     random.seed(RANDOM_SEED)
 
     env = gym.make('CartPole-v0')
-    log_dir_name = datetime.datetime.now().strftime("%Y-%m-%d %H%M%S")
+    log_dir_name = TF_LOGS_DIR + datetime.datetime.now().strftime("%Y-%m-%d %H%M%S")
     writer = tf.contrib.summary.create_file_writer(log_dir_name)
     rl_writer = tf.contrib.summary.create_file_writer(log_dir_name + 'rl')
     writer.set_as_default()
@@ -337,7 +337,7 @@ def main(*,
 
 default_hyperparameters = {
     'RANDOM_SEED': 42,
-    'RENDER': False,
+    'RENDER': True,
 
     'MLP_UNITS': 16,
     'MLP_LAYERS': 1,  # one shared hidden layer between V and P
@@ -392,11 +392,13 @@ class RLEstimator():
 
 
 if __name__ == '__main__':
-    # main(**default_hyperparameters)
+    main(**default_hyperparameters)
+    exit()
     INITS_PER_HYPERSET = 2
     assert INITS_PER_HYPERSET % 2 == 0
     rle = RLEstimator()
     gs = GridSearchCV(rle, {
+        'RENDER': False,
         'GAMMA': [0.95, 0.99],
         'ADVANTAGE_LAMBDA': [0.8],
         'TOTAL_ENV_STEPS': [10_000],
