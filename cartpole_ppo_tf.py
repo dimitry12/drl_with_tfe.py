@@ -7,6 +7,7 @@ import tensorflow as tf
 import tensorflow.contrib.eager as tfe
 from sklearn.model_selection import GridSearchCV
 import pandas as pd
+import json
 
 
 class P_and_V_Model(tf.keras.Model):
@@ -206,7 +207,8 @@ def main(*, hparams):
 
             observations = np.asarray(observations, dtype=np.float32)
             for dim_i in range(0, observations_space_dim_count):
-                tf.contrib.summary.histogram('visitation_state_dim_' + str(dim_i), observations[:,dim_i])
+                tf.contrib.summary.histogram(
+                    'visitation_state_dim_' + str(dim_i), observations[:, dim_i])
             taken_actions = np.asarray(taken_actions, dtype=np.int64)
             predicted_values = np.asarray(predicted_values, dtype=np.float32)
             neg_log_p_ac_s = np.asarray(neg_log_p_ac_s, dtype=np.float32)
@@ -328,6 +330,7 @@ def main(*, hparams):
 
 
 default_hyperparameters = {
+    'VERSION': '0.1.0',
     'RANDOM_SEED': 42,
     'RENDER': True,
 
@@ -378,6 +381,8 @@ class RLEstimator():
         return self
 
     def score(self, X):
+        with open('score.log', 'a') as log:
+            log.write(json.dumps({'score': self.score_, **self.params_values}))
         return self.score_
 
 
