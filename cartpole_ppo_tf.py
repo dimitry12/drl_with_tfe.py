@@ -63,9 +63,10 @@ def main(*, hparams):
     assert hparams['TRANSITIONS_IN_EXPERIENCE_BUFFER'] % hparams['GRADIENT_LEARNING_BATCH_SIZE'] == 0
     tf.enable_eager_execution()
 
-    tf.set_random_seed(hparams['RANDOM_SEED'])
-    np.random.seed(hparams['RANDOM_SEED'])
-    random.seed(hparams['RANDOM_SEED'])
+    if hparams['RANDOM_SEED']:
+        tf.set_random_seed(hparams['RANDOM_SEED'])
+        np.random.seed(hparams['RANDOM_SEED'])
+        random.seed(hparams['RANDOM_SEED'])
 
     env = gym.make('CartPole-v0')
     log_dir_name = './tf-logs/' + datetime.datetime.now().strftime("%Y-%m-%d %H%M%S")
@@ -388,6 +389,7 @@ if __name__ == '__main__':
     rle = RLEstimator()
     gs = GridSearchCV(rle, {
         'RENDER': False,
+        'RANDOM_SEEED': False,
         'GAMMA': [0.95, 0.99],
         'ADVANTAGE_LAMBDA': [0.8],
         'TOTAL_ENV_STEPS': [10_000],
