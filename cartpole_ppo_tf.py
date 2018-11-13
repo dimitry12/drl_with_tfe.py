@@ -248,16 +248,27 @@ def main(*, hparams):
                         # Updated policy may offer very different distribution
                         # over untaken actions.
                         ratio = tf.exp(old_neg_log_p_ac_s_batch - neg_log_p_ac)
+
                         pg_losses = advantages_batch * ratio
                         pg_losses2 = advantages_batch * \
                             tf.clip_by_value(
                                 ratio, 1.0 - hparams['CLIP_RANGE'], 1.0 + hparams['CLIP_RANGE'])
-                        # effectively:
-                        # - clip ratio 1.0+hparams['CLIP_RANGE'] when advantage is positive
-                        # - clip ratio 1.0-hparams['CLIP_RANGE'] when advantage is negative
-                        # (paper's wording is misleading, but graphs are correct)
+
+                        # This effectively does:
+                        # - clips ratio from going above 1.0+hparams['CLIP_RANGE'] when advantage is positive
+                        #   (i.e. makes objective indifferent to changes in ratio above the upper-threshold)
+                        # - clips ratio from going under 1.0-hparams['CLIP_RANGE'] when advantage is negative
+                        #   (i.e. makes objective indifferent to changes in ratio below the lower-threshold)
+                        # - YET, IMPORTANTLY:
+                        #   - it DOES NOT clip the ratio from going under the lower-threshold when advantage is positive
+                        #   - and therefore: objective IS sensitive (can suffer) if ratio goes deep under the
+                        #     low-threshold.
+                        # Using wording from the paper:
+                        # "With this scheme, we only ignore the change in probability ratio when it would make the objective improve,
+                        #  and we include it when it makes the objective worse."
                         pg_loss = tf.reduce_mean(
                             tf.minimum(pg_losses, pg_losses2))
+
                         tf.contrib.summary.scalar(
                             'batch_average_CLIP', pg_loss)
                         pg_loss = -pg_loss  # TF's optimizers minimize
