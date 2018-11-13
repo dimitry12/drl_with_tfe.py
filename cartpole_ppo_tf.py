@@ -204,6 +204,8 @@ def main(*, hparams):
                 tail_of_returns = v_targets[t]
 
             observations = np.asarray(observations, dtype=np.float32)
+            for dim_i in range(0, observations_space_dim_count):
+                tf.contrib.summary.histogram('visitation_state_dim_' + str(dim_i), observations[:,dim_i])
             taken_actions = np.asarray(taken_actions, dtype=np.int64)
             predicted_values = np.asarray(predicted_values, dtype=np.float32)
             neg_log_p_ac_s = np.asarray(neg_log_p_ac_s, dtype=np.float32)
