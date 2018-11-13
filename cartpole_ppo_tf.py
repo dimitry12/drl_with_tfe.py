@@ -59,35 +59,16 @@ class P_and_V_Model(tf.keras.Model):
             return p_logits, v_logit
 
 
-def main(*,
-         RANDOM_SEED,
-         RENDER,
-         MLP_UNITS,
-         MLP_LAYERS,
-         P_MLP_LAYERS,
-         V_MLP_LAYERS,
-         GRADIENT_LEARNING_BATCH_SIZE,
-         TRANSITIONS_IN_EXPERIENCE_BUFFER,
-         HORIZON,
-         TOTAL_ENV_STEPS,
-         EPOCHS_PER_UPDATE,
-         CLIP_RANGE,
-         GAMMA,
-         ADVANTAGE_LAMBDA,
-         MAX_GRAD_NORM,
-         VALUE_LOSS_WEIGHT,
-         LR,
-         TF_LOGS_DIR
-         ):
-    assert TRANSITIONS_IN_EXPERIENCE_BUFFER % GRADIENT_LEARNING_BATCH_SIZE == 0
+def main(*, hparams):
+    assert hparams['TRANSITIONS_IN_EXPERIENCE_BUFFER'] % hparams['GRADIENT_LEARNING_BATCH_SIZE'] == 0
     tf.enable_eager_execution()
 
-    tf.set_random_seed(RANDOM_SEED)
-    np.random.seed(RANDOM_SEED)
-    random.seed(RANDOM_SEED)
+    tf.set_random_seed(hparams['RANDOM_SEED'])
+    np.random.seed(hparams['RANDOM_SEED'])
+    random.seed(hparams['RANDOM_SEED'])
 
     env = gym.make('CartPole-v0')
-    log_dir_name = TF_LOGS_DIR + datetime.datetime.now().strftime("%Y-%m-%d %H%M%S")
+    log_dir_name = './tf-logs/' + datetime.datetime.now().strftime("%Y-%m-%d %H%M%S")
     writer = tf.contrib.summary.create_file_writer(log_dir_name)
     rl_writer = tf.contrib.summary.create_file_writer(log_dir_name + 'rl')
     writer.set_as_default()
@@ -96,11 +77,13 @@ def main(*,
     observations_space_dim_count = env.observation_space.shape[0]
     action_space_cardinality = env.action_space.n  # only works for Discrete
 
-    pv_model = P_and_V_Model(classes=action_space_cardinality, mlp_layers=MLP_LAYERS,
-                             mlp_units=MLP_UNITS, v_mlp_layers=V_MLP_LAYERS, p_mlp_layers=P_MLP_LAYERS)
-    optimizer = tf.train.AdamOptimizer(learning_rate=LR, epsilon=1e-5)
+    pv_model = P_and_V_Model(classes=action_space_cardinality, mlp_layers=hparams['MLP_LAYERS'],
+                             mlp_units=hparams['MLP_UNITS'], v_mlp_layers=hparams['V_MLP_LAYERS'], p_mlp_layers=hparams['P_MLP_LAYERS'])
+    optimizer = tf.train.AdamOptimizer(
+        learning_rate=hparams['LR'], epsilon=1e-5)
 
-    learner_updates = int(TOTAL_ENV_STEPS // TRANSITIONS_IN_EXPERIENCE_BUFFER)
+    learner_updates = int(
+        hparams['TOTAL_ENV_STEPS'] // hparams['TRANSITIONS_IN_EXPERIENCE_BUFFER'])
 
     observation: np.ndarray = env.reset()
     episode_done: bool = False
@@ -123,7 +106,7 @@ def main(*,
             def vector_to_tf_constant(x): return tf.constant(
                 x, dtype=tf.keras.backend.floatx(), shape=(1, len(x)))
 
-            for _ in range(TRANSITIONS_IN_EXPERIENCE_BUFFER):
+            for _ in range(hparams['TRANSITIONS_IN_EXPERIENCE_BUFFER']):
                 p_logits, v_logit = pv_model(
                     vector_to_tf_constant(observation))
                 p_distribution = tf.distributions.Categorical(logits=p_logits)
@@ -144,7 +127,7 @@ def main(*,
                     action.numpy()[0])
                 rewards.append(reward)
                 total_reward += reward
-                if (RENDER):
+                if (hparams['RENDER']):
                     env.render()
 
                 if episode_done:
@@ -192,14 +175,16 @@ def main(*,
             v_targets = np.zeros_like(rewards, dtype=np.float32)
             # tail_of_gae  is lambda-discounted sum of per-slice surprises. We learn from surprises!
             # tail_of_returns is gamma-discounted sum of per-transition rewards (policy-value)
-            for t in reversed(range(TRANSITIONS_IN_EXPERIENCE_BUFFER)):
-                is_this_last_slice = (t == TRANSITIONS_IN_EXPERIENCE_BUFFER-1)
+            for t in reversed(range(hparams['TRANSITIONS_IN_EXPERIENCE_BUFFER'])):
+                is_this_last_slice = (
+                    t == hparams['TRANSITIONS_IN_EXPERIENCE_BUFFER']-1)
 
                 if is_this_last_slice:
                     did_this_slice_ended_episode = episode_done
                     next_slice_v_logit = last_v_logit
                     tail_of_gae = 0  # no heuristic for gamma-lambda-discounted sum of residuals
-                    tail_of_returns = GAMMA*last_v_logit  # estimate of the tail
+                    tail_of_returns = hparams['GAMMA'] * \
+                        last_v_logit  # estimate of the tail
                 else:
                     did_this_slice_ended_episode = episode_dones[t+1]
                     next_slice_v_logit = predicted_values[t+1]
@@ -209,11 +194,12 @@ def main(*,
                     tail_of_returns = 0
                     td_residual = rewards[t] - predicted_values[t]
                 else:
-                    td_residual = rewards[t] + GAMMA * \
+                    td_residual = rewards[t] + hparams['GAMMA'] * \
                         next_slice_v_logit - predicted_values[t]
 
-                gae_s[t] = td_residual + GAMMA * ADVANTAGE_LAMBDA * tail_of_gae
-                v_targets[t] = rewards[t] + GAMMA*tail_of_returns
+                gae_s[t] = td_residual + hparams['GAMMA'] * \
+                    hparams['ADVANTAGE_LAMBDA'] * tail_of_gae
+                v_targets[t] = rewards[t] + hparams['GAMMA']*tail_of_returns
                 tail_of_gae = gae_s[t]
                 tail_of_returns = v_targets[t]
 
@@ -237,9 +223,9 @@ def main(*,
             dataset = tf.data.Dataset.from_tensor_slices(
                 (observations, v_targets, taken_actions, predicted_values, neg_log_p_ac_s, gae_s))
             dataset = dataset.shuffle(
-                EPOCHS_PER_UPDATE*TRANSITIONS_IN_EXPERIENCE_BUFFER).batch(GRADIENT_LEARNING_BATCH_SIZE)
+                hparams['EPOCHS_PER_UPDATE']*hparams['TRANSITIONS_IN_EXPERIENCE_BUFFER']).batch(hparams['GRADIENT_LEARNING_BATCH_SIZE'])
             v_losses = []
-            for _ in range(EPOCHS_PER_UPDATE):
+            for _ in range(hparams['EPOCHS_PER_UPDATE']):
                 for batch_number, dataset_batch in enumerate(dataset):
                     observations_batch, v_targets_batch, old_taken_actions_batch, old_predicted_values_batch, old_neg_log_p_ac_s_batch, advantages_batch = dataset_batch
 
@@ -257,10 +243,10 @@ def main(*,
                         pg_losses = advantages_batch * ratio
                         pg_losses2 = advantages_batch * \
                             tf.clip_by_value(
-                                ratio, 1.0 - CLIP_RANGE, 1.0 + CLIP_RANGE)
+                                ratio, 1.0 - hparams['CLIP_RANGE'], 1.0 + hparams['CLIP_RANGE'])
                         # effectively:
-                        # - clip ratio 1.0+CLIP_RANGE when advantage is positive
-                        # - clip ratio 1.0-CLIP_RANGE when advantage is negative
+                        # - clip ratio 1.0+hparams['CLIP_RANGE'] when advantage is positive
+                        # - clip ratio 1.0-hparams['CLIP_RANGE'] when advantage is negative
                         # (paper's wording is misleading, but graphs are correct)
                         pg_loss = tf.reduce_mean(
                             tf.minimum(pg_losses, pg_losses2))
@@ -268,17 +254,19 @@ def main(*,
                             'batch_average_CLIP', pg_loss)
                         pg_loss = -pg_loss  # TF's optimizers minimize
                         tf.contrib.summary.histogram('untrusted_p_ratio_clipped_off', tf.to_float(
-                            tf.greater(tf.abs(ratio-1.), CLIP_RANGE))*tf.abs(ratio-CLIP_RANGE))
+                            tf.greater(tf.abs(ratio-1.), hparams['CLIP_RANGE']))*tf.abs(ratio-hparams['CLIP_RANGE']))
 
                         v_pred_clipped = old_predicted_values_batch + \
                             tf.clip_by_value(
-                                train_v_logit - old_predicted_values_batch, - CLIP_RANGE, CLIP_RANGE)
+                                train_v_logit - old_predicted_values_batch, - hparams['CLIP_RANGE'], hparams['CLIP_RANGE'])
                         tf.contrib.summary.histogram('untrusted_v_diff_clipped_off', tf.abs(
                             v_pred_clipped - train_v_logit))
-                        v_f_losses1 = tf.square(train_v_logit - v_targets_batch)
+                        v_f_losses1 = tf.square(
+                            train_v_logit - v_targets_batch)
                         tf.contrib.summary.scalar('batch_average_unclipped_v_loss',
                                                   tf.reduce_mean(v_f_losses1))
-                        v_f_losses2 = tf.square(v_pred_clipped - v_targets_batch)
+                        v_f_losses2 = tf.square(
+                            v_pred_clipped - v_targets_batch)
                         # See several scenarios:
                         #
                         # 1) R.....O.C..V
@@ -291,7 +279,7 @@ def main(*,
                         #
                         # To summarize, this objective will:
                         # - move predicted value closer to actual return
-                        # - yet keep it within CLIP_RANGE of the old predicted value
+                        # - yet keep it within hparams['CLIP_RANGE'] of the old predicted value
                         v_f_loss = .5 * \
                             tf.reduce_mean(tf.maximum(
                                 v_f_losses1, v_f_losses2))
@@ -300,19 +288,20 @@ def main(*,
                         v_losses.append(v_f_loss.numpy())
 
                         # Total loss
-                        loss = pg_loss + v_f_loss * VALUE_LOSS_WEIGHT
+                        loss = pg_loss + v_f_loss * \
+                            hparams['VALUE_LOSS_WEIGHT']
 
                     grads = tape.gradient(loss, pv_model.variables)
                     grads, _grad_norm = tf.clip_by_global_norm(
-                        grads, MAX_GRAD_NORM)
+                        grads, hparams['MAX_GRAD_NORM'])
                     optimizer.apply_gradients(zip(grads, pv_model.variables),
                                               global_step=tf.train.get_or_create_global_step())
 
-            fps = int(TRANSITIONS_IN_EXPERIENCE_BUFFER /
+            fps = int(hparams['TRANSITIONS_IN_EXPERIENCE_BUFFER'] /
                       (time.time() - current_update_started_at))
 
             print("update: ", learner_update)
-            print("Hypers: ", GAMMA, ADVANTAGE_LAMBDA)
+            print("Hypers: ", hparams['GAMMA'], hparams['ADVANTAGE_LAMBDA'])
             print('episodes in update: ', episodes_in_current_update)
             print('average steps per episode: ', np.asarray(
                 steps_in_current_update).mean())
@@ -323,11 +312,11 @@ def main(*,
             print('max reward per episode: ', np.asarray(
                 total_rewards_in_current_update).max())
             print("total timesteps so far", learner_update *
-                  TRANSITIONS_IN_EXPERIENCE_BUFFER)
+                  hparams['TRANSITIONS_IN_EXPERIENCE_BUFFER'])
             print("average of batch-averaged V losses",
                   np.array(v_losses).mean())
             tf.contrib.summary.scalar(
-                'total_frames', tf.constant(learner_update*TRANSITIONS_IN_EXPERIENCE_BUFFER))
+                'total_frames', tf.constant(learner_update*hparams['TRANSITIONS_IN_EXPERIENCE_BUFFER']))
             print("fps", fps)
 
     print('Total reward:', total_reward)
@@ -348,7 +337,7 @@ default_hyperparameters = {
     'GRADIENT_LEARNING_BATCH_SIZE': 32,
     'TRANSITIONS_IN_EXPERIENCE_BUFFER': 1024,
     'HORIZON': 1024,
-    'TOTAL_ENV_STEPS': 2e7,
+    'TOTAL_ENV_STEPS': 1e4,  # 2e7,
 
     'EPOCHS_PER_UPDATE': 4,
 
@@ -358,8 +347,6 @@ default_hyperparameters = {
     'MAX_GRAD_NORM': .5,
     'VALUE_LOSS_WEIGHT': .25,
     'LR': 3e-4,
-
-    'TF_LOGS_DIR': './tf-logs/',
 }
 
 
@@ -384,7 +371,7 @@ class RLEstimator():
                 self.params_values[param] = param_default_value
 
     def fit(self, X):
-        self.score_ = main(**self.params_values)
+        self.score_ = main(hparams=self.params_values)
         return self
 
     def score(self, X):
@@ -392,7 +379,7 @@ class RLEstimator():
 
 
 if __name__ == '__main__':
-    main(**default_hyperparameters)
+    main(hparams=default_hyperparameters)
     exit()
     INITS_PER_HYPERSET = 2
     assert INITS_PER_HYPERSET % 2 == 0
