@@ -177,9 +177,7 @@ def main(*, hparams):
 
             predicted_values = np.asarray(predicted_values, dtype=np.float32)
             gae_s = np.zeros_like(rewards, dtype=np.float32)
-            v_targets = np.zeros_like(rewards, dtype=np.float32)
             # tail_of_gae  is lambda-discounted sum of per-slice surprises. We learn from surprises!
-            # tail_of_returns is gamma-discounted sum of per-transition rewards (policy-value)
             for t in reversed(range(hparams['TRANSITIONS_IN_EXPERIENCE_BUFFER'])):
                 is_this_last_slice = (
                     t == hparams['TRANSITIONS_IN_EXPERIENCE_BUFFER']-1)
@@ -188,15 +186,12 @@ def main(*, hparams):
                     did_this_slice_ended_episode = episode_done
                     next_slice_v_logit = last_v_logit
                     tail_of_gae = 0  # no heuristic for gamma-lambda-discounted sum of residuals
-                    tail_of_returns = hparams['GAMMA'] * \
-                        last_v_logit  # estimate of the tail
                 else:
                     did_this_slice_ended_episode = episode_dones[t+1]
                     next_slice_v_logit = predicted_values[t+1]
 
                 if did_this_slice_ended_episode:
                     tail_of_gae = 0  # zero-out the tail of generalized advantage estimation
-                    tail_of_returns = 0
                     td_residual = rewards[t] - predicted_values[t]
                 else:
                     td_residual = rewards[t] + hparams['GAMMA'] * \
@@ -204,17 +199,7 @@ def main(*, hparams):
 
                 gae_s[t] = td_residual + hparams['GAMMA'] * \
                     hparams['ADVANTAGE_LAMBDA'] * tail_of_gae
-                v_targets[t] = rewards[t] + hparams['GAMMA']*tail_of_returns
                 tail_of_gae = gae_s[t]
-                tail_of_returns = v_targets[t]
-
-            observations = np.asarray(observations, dtype=np.float32)
-            for dim_i in range(0, observations_space_dim_count):
-                tf.contrib.summary.histogram(
-                    'visitation_state_dim_' + str(dim_i), observations[:, dim_i])
-            taken_actions = np.asarray(taken_actions, dtype=np.int64)
-            predicted_values = np.asarray(predicted_values, dtype=np.float32)
-            neg_log_p_ac_s = np.asarray(neg_log_p_ac_s, dtype=np.float32)
 
             # GAE is lambda-exponentially-weighted sum of:
             # - k-step TD-residuals, and each of these is the difference of:
@@ -224,6 +209,13 @@ def main(*, hparams):
             # sum of GAE and baseline is lambda-exponentially-weighted
             # sum of k-step value-estimates.
             v_targets = gae_s + predicted_values
+
+            observations = np.asarray(observations, dtype=np.float32)
+            for dim_i in range(0, observations_space_dim_count):
+                tf.contrib.summary.histogram(
+                    'visitation_state_dim_' + str(dim_i), observations[:, dim_i])
+            taken_actions = np.asarray(taken_actions, dtype=np.int64)
+            neg_log_p_ac_s = np.asarray(neg_log_p_ac_s, dtype=np.float32)
 
             tf.contrib.summary.histogram('GAEs', gae_s)
 
