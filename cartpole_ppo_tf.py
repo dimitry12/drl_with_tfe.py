@@ -176,30 +176,7 @@ def main(*, hparams):
             #   new episode.
 
             predicted_values = np.asarray(predicted_values, dtype=np.float32)
-            gae_s = np.zeros_like(rewards, dtype=np.float32)
-            # tail_of_gae  is lambda-discounted sum of per-slice surprises. We learn from surprises!
-            for t in reversed(range(hparams['TRANSITIONS_IN_EXPERIENCE_BUFFER'])):
-                is_this_last_slice = (
-                    t == hparams['TRANSITIONS_IN_EXPERIENCE_BUFFER']-1)
-
-                if is_this_last_slice:
-                    did_this_slice_ended_episode = episode_done
-                    next_slice_v_logit = last_v_logit
-                    tail_of_gae = 0  # no heuristic for gamma-lambda-discounted sum of residuals
-                else:
-                    did_this_slice_ended_episode = episode_dones[t+1]
-                    next_slice_v_logit = predicted_values[t+1]
-
-                if did_this_slice_ended_episode:
-                    tail_of_gae = 0  # zero-out the tail of generalized advantage estimation
-                    td_residual = rewards[t] - predicted_values[t]
-                else:
-                    td_residual = rewards[t] + hparams['GAMMA'] * \
-                        next_slice_v_logit - predicted_values[t]
-
-                gae_s[t] = td_residual + hparams['GAMMA'] * \
-                    hparams['ADVANTAGE_LAMBDA'] * tail_of_gae
-                tail_of_gae = gae_s[t]
+            gae_s = calculate_gae(hparams=hparams, ADVANTAGE_LAMBDA=hparams['ADVANTAGE_LAMBDA'], rewards=rewards, episode_dones=episode_dones, predicted_values=predicted_values, episode_done=episode_done, last_v_logit=last_v_logit)
 
             # GAE is lambda-exponentially-weighted sum of:
             # - k-step TD-residuals, and each of these is the difference of:
@@ -397,3 +374,32 @@ if __name__ == '__main__':
     gs.fit([.0]*INITS_PER_HYPERSET)
     print(pd.DataFrame(gs.cv_results_).filter(
         regex='^(param_)|(mean_test_score)'))
+
+
+def calculate_gae(*, hparams, ADVANTAGE_LAMBDA, rewards, episode_dones, predicted_values, episode_done, last_v_logit):
+    gae_s = np.zeros_like(rewards, dtype=np.float32)
+    # tail_of_gae  is lambda-discounted sum of per-slice surprises. We learn from surprises!
+    for t in reversed(range(hparams['TRANSITIONS_IN_EXPERIENCE_BUFFER'])):
+        is_this_last_slice = (
+            t == hparams['TRANSITIONS_IN_EXPERIENCE_BUFFER']-1)
+
+        if is_this_last_slice:
+            did_this_slice_ended_episode = episode_done
+            next_slice_v_logit = last_v_logit
+            tail_of_gae = 0  # no heuristic for gamma-lambda-discounted sum of residuals
+        else:
+            did_this_slice_ended_episode = episode_dones[t+1]
+            next_slice_v_logit = predicted_values[t+1]
+
+        if did_this_slice_ended_episode:
+            tail_of_gae = 0  # zero-out the tail of generalized advantage estimation
+            td_residual = rewards[t] - predicted_values[t]
+        else:
+            td_residual = rewards[t] + hparams['GAMMA'] * \
+                next_slice_v_logit - predicted_values[t]
+
+        gae_s[t] = td_residual + hparams['GAMMA'] * \
+            ADVANTAGE_LAMBDA * tail_of_gae
+        tail_of_gae = gae_s[t]
+
+    return gae_s
