@@ -90,7 +90,7 @@ class P_and_V_Model(tf.keras.Model):
             return p_logits, v_logit
 
 
-def main(*, hparams):
+def main(*, hparams, random_name = ''):
     assert hparams['TRANSITIONS_IN_EXPERIENCE_BUFFER'] % hparams['GRADIENT_LEARNING_BATCH_SIZE'] == 0
     tf.enable_eager_execution()
 
@@ -100,7 +100,7 @@ def main(*, hparams):
         random.seed(hparams['RANDOM_SEED'])
 
     env = gym.make('CartPole-v0')
-    random_name = datetime.datetime.now().strftime("%Y%m%d%H%M") + '-' + namesgenerator.get_random_name()
+    random_name = datetime.datetime.now().strftime("%Y%m%d%H%M") + '-' + random_name
     with open('./tf-logs/' + random_name + '.hparams.json', 'a') as log:
         log.write(json.dumps(hparams))
     log_dir_name = './tf-logs/' + random_name + '-'
@@ -378,6 +378,7 @@ class RLEstimator():
     params_values = {}
     score_ = None
     _flushed_score = False
+    _random_name = ''
 
     def __init__(self, *args, **kwargs):
         self.set_params(**kwargs)
@@ -395,14 +396,15 @@ class RLEstimator():
                 self.params_values[param] = param_default_value
 
     def fit(self, X):
-        self.score_ = main(hparams=self.params_values)
+        self._random_name = namesgenerator.get_random_name()
+        self.score_ = main(hparams=self.params_values, random_name=self._random_name)
         return self
 
     def score(self, X):
         if not self._flushed_score:
             self._flushed_score = True
             with open('score.log', 'a') as log:
-                log.write(json.dumps({'score': self.score_, **self.params_values}) + "\n")
+                log.write(json.dumps({'score': self.score_, 'random_name': self._random_name, **self.params_values}) + "\n")
         return self.score_
 
 
