@@ -11,7 +11,6 @@ import namesgenerator
 import json
 
 
-
 def calculate_gae(*, hparams, ADVANTAGE_LAMBDA, rewards, episode_dones, predicted_values, episode_done, last_v_logit):
     gae_s = np.zeros_like(rewards, dtype=np.float32)
     # tail_of_gae  is lambda-discounted sum of per-slice surprises. We learn from surprises!
@@ -39,6 +38,7 @@ def calculate_gae(*, hparams, ADVANTAGE_LAMBDA, rewards, episode_dones, predicte
         tail_of_gae = gae_s[t]
 
     return gae_s
+
 
 class P_and_V_Model(tf.keras.Model):
     def __init__(self, classes, mlp_layers, mlp_units, v_mlp_layers, p_mlp_layers, heads='pv'):
@@ -90,7 +90,7 @@ class P_and_V_Model(tf.keras.Model):
             return p_logits, v_logit
 
 
-def main(*, hparams, random_name = ''):
+def main(*, hparams, random_name=''):
     assert hparams['TRANSITIONS_IN_EXPERIENCE_BUFFER'] % hparams['GRADIENT_LEARNING_BATCH_SIZE'] == 0
     tf.enable_eager_execution()
 
@@ -99,7 +99,7 @@ def main(*, hparams, random_name = ''):
         np.random.seed(hparams['RANDOM_SEED'])
         random.seed(hparams['RANDOM_SEED'])
 
-    env = gym.make('CartPole-v0')
+    env = gym.make(hparams['ENV'])
     random_name = datetime.datetime.now().strftime("%Y%m%d%H%M") + '-' + random_name
     with open('./tf-logs/' + random_name + '.hparams.json', 'a') as log:
         log.write(json.dumps(hparams))
@@ -215,10 +215,12 @@ def main(*, hparams, random_name = ''):
             # Baseline is constant throughout the expression, therefore
             # sum of GAE and baseline is lambda-exponentially-weighted
             # sum of k-step value-estimates.
-            gae_s = calculate_gae(hparams=hparams, ADVANTAGE_LAMBDA=hparams['VALUE_LAMBDA'], rewards=rewards, episode_dones=episode_dones, predicted_values=predicted_values, episode_done=episode_done, last_v_logit=last_v_logit)
+            gae_s = calculate_gae(hparams=hparams, ADVANTAGE_LAMBDA=hparams['VALUE_LAMBDA'], rewards=rewards,
+                                  episode_dones=episode_dones, predicted_values=predicted_values, episode_done=episode_done, last_v_logit=last_v_logit)
             v_targets = gae_s + predicted_values
 
-            gae_s = calculate_gae(hparams=hparams, ADVANTAGE_LAMBDA=hparams['ADVANTAGE_LAMBDA'], rewards=rewards, episode_dones=episode_dones, predicted_values=predicted_values, episode_done=episode_done, last_v_logit=last_v_logit)
+            gae_s = calculate_gae(hparams=hparams, ADVANTAGE_LAMBDA=hparams['ADVANTAGE_LAMBDA'], rewards=rewards,
+                                  episode_dones=episode_dones, predicted_values=predicted_values, episode_done=episode_done, last_v_logit=last_v_logit)
 
             observations = np.asarray(observations, dtype=np.float32)
             for dim_i in range(0, observations_space_dim_count):
@@ -343,84 +345,3 @@ def main(*, hparams, random_name = ''):
     print('Total reward:', total_reward)
     print('Total episodes:', total_episodes)
     return float(total_reward)/float(total_episodes)
-
-
-default_hyperparameters = {
-    'VERSION': '1.1.0',
-    'RANDOM_SEED': 42,
-    'RENDER': True,
-
-    'MLP_UNITS': 16,
-    'MLP_LAYERS': 1,  # one shared hidden layer between V and P
-    'P_MLP_LAYERS': 0,  # policy network is linear
-    'V_MLP_LAYERS': 1,  # V network is "deep"
-
-    # the dimensionality for all these is: "MDP state transitions" (not observational frames)
-    'GRADIENT_LEARNING_BATCH_SIZE': 32,
-    'TRANSITIONS_IN_EXPERIENCE_BUFFER': 1024,
-    'HORIZON': 1024,
-    'TOTAL_ENV_STEPS': 1e4,  # 2e7,
-
-    'EPOCHS_PER_UPDATE': 4,
-
-    'CLIP_RANGE': .2,
-    'GAMMA': .99,
-    'ADVANTAGE_LAMBDA': .97,
-    'VALUE_LAMBDA': .99,
-    'MAX_GRAD_NORM': .5,
-    'VALUE_LOSS_WEIGHT': .25,
-    'LR': 3e-4,
-}
-
-
-class RLEstimator():
-    params_default = default_hyperparameters
-    params_values = {}
-    score_ = None
-    _flushed_score = False
-    _random_name = ''
-
-    def __init__(self, *args, **kwargs):
-        self.set_params(**kwargs)
-
-    def get_params(self, *args, **kwargs):
-        return self.params_values
-
-    def set_params(self, *args, **kwargs):
-        for param, param_default_value in self.params_default.items():
-            if param in kwargs:
-                self.params_values[param] = kwargs[param]
-            elif param in self.params_values:
-                pass
-            else:
-                self.params_values[param] = param_default_value
-
-    def fit(self, X):
-        self._random_name = namesgenerator.get_random_name()
-        self.score_ = main(hparams=self.params_values, random_name=self._random_name)
-        return self
-
-    def score(self, X):
-        if not self._flushed_score:
-            self._flushed_score = True
-            with open('score.log', 'a') as log:
-                log.write(json.dumps({'score': self.score_, 'random_name': self._random_name, **self.params_values}) + "\n")
-        return self.score_
-
-
-if __name__ == '__main__':
-    main(hparams=default_hyperparameters)
-    exit()
-    INITS_PER_HYPERSET = 2
-    assert INITS_PER_HYPERSET % 2 == 0
-    rle = RLEstimator()
-    gs = GridSearchCV(rle, {
-        'RENDER': [False],
-        'RANDOM_SEEED': [False],
-        'GAMMA': [0.95, 0.99],
-        'ADVANTAGE_LAMBDA': [0.8],
-        'TOTAL_ENV_STEPS': [10_000],
-    }, cv=INITS_PER_HYPERSET, n_jobs=-1, refit=False)
-    gs.fit([.0]*INITS_PER_HYPERSET)
-    print(pd.DataFrame(gs.cv_results_).filter(
-        regex='^(param_)|(mean_test_score)'))
