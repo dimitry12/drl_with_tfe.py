@@ -22,3 +22,8 @@ Implementations of deep reinforcement learning algorithms with Tensorflow Eager,
 - inspired by:
   - [OpenAI Baselines](https://github.com/openai/baselines)
   - [Unity Machine Learning Agents Toolkit](https://github.com/Unity-Technologies/ml-agents)
+
+# Results
+- `CartPole-v0`:
+  - PPO requires higher advantage-lambda and gamma,
+    yet isn't very sensitive to value-lambda
