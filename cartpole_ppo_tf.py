@@ -9,7 +9,7 @@ from sklearn.model_selection import GridSearchCV
 import pandas as pd
 import namesgenerator
 import json
-from common import main
+from ppo import main
 
 
 default_hyperparameters = {
