@@ -8,6 +8,34 @@ import tensorflow.contrib.eager as tfe
 import json
 
 
+def get_transformations(env):
+    def vector_to_tf_constant(x, dtype=tf.keras.backend.floatx()):
+        return tf.constant(x, dtype=dtype, shape=(1, len(x)))
+
+    def passthrough(tensor):
+        return tensor
+
+    def one_hot(tensor, dims):
+        return tf.layers.flatten(tf.one_hot(tensor, dims))
+
+    if isinstance(env.observation_space, gym.spaces.Box):
+        observations_space_dim_count = env.observation_space.shape[0]
+
+        def preprocess_obs(x): return passthrough(vector_to_tf_constant(x))
+    elif isinstance(env.observation_space, gym.spaces.Discrete):
+        observations_space_dim_count = 1
+
+        def preprocess_obs(x): return one_hot(
+            vector_to_tf_constant(x, dtype=tf.int32), env.observation_space.n)
+
+    if isinstance(env.action_space, gym.spaces.Discrete):
+        action_space_cardinality = env.action_space.n  # only works for Discrete
+    elif isinstance(env.action_space, gym.spaces.tuple_space.Tuple) and not [s for s in env.action_space.spaces if not isinstance(s, gym.spaces.Discrete)]:
+        action_space_cardinality = sum([s.n for s in env.action_space.spaces])
+
+    return (observations_space_dim_count, preprocess_obs, action_space_cardinality, lambda x: x)
+
+
 def calculate_gae(*, hparams, ADVANTAGE_LAMBDA, rewards, episode_dones, predicted_values, episode_done, last_v_logit):
     gae_s = np.zeros_like(rewards, dtype=np.float32)
     # tail_of_gae  is lambda-discounted sum of per-slice surprises. We learn from surprises!
@@ -104,29 +132,8 @@ def main(*, hparams, random_name=''):
     writer = tf.contrib.summary.create_file_writer(log_dir_name)
     rl_writer = tf.contrib.summary.create_file_writer(log_dir_name + 'rl')
 
-    def vector_to_tf_constant(x):
-        return tf.constant(x, dtype=tf.keras.backend.floatx(), shape=(1, len(x)))
-
-    def passthrough(tensor):
-        return tensor
-
-    def one_hot(tensor, dims):
-        return tf.layers.flatten(tf.one_hot(tensor, dims))
-
-    if isinstance(env.observation_space, gym.spaces.Box):
-        observations_space_dim_count = env.observation_space.shape[0]
-
-        def preprocess_obs(x): return passthrough(vector_to_tf_constant(x))
-    elif isinstance(env.observation_space, gym.spaces.Discrete):
-        observations_space_dim_count = 1
-
-        def preprocess_obs(x): return one_hot(
-            vector_to_tf_constant(x), env.observation_space.n)
-
-    if isinstance(env.action_space, gym.spaces.Discrete):
-        action_space_cardinality = env.action_space.n  # only works for Discrete
-    elif isinstance(env.action_space, gym.spaces.tuple_space.Tuple) and not [s for s in env.action_space.spaces if not isinstance(s, gym.spaces.Discrete)]:
-        action_space_cardinality = sum([s.n for s in env.action_space.spaces])
+    observations_space_dim_count, preprocess_obs, action_space_cardinality, postprocess_preds = get_transformations(
+        env)
 
     pv_model = P_and_V_Model(classes=action_space_cardinality, mlp_layers=hparams['MLP_LAYERS'],
                              mlp_units=hparams['MLP_UNITS'], v_mlp_layers=hparams['V_MLP_LAYERS'], p_mlp_layers=hparams['P_MLP_LAYERS'])
