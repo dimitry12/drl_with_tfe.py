@@ -63,11 +63,13 @@ def get_transformations(env):
             env.action_space.n]  # only works for Discrete
     elif isinstance(env.action_space, gym.spaces.tuple_space.Tuple) and not [s for s in env.action_space.spaces if not isinstance(s, gym.spaces.Discrete)]:
         action_space_cardinalities = [s.n for s in env.action_space.spaces]
+    else:
+        action_space_cardinalities = [env.action_space.n]
 
     def postprocess_preds(x):
         return tf.split(x, action_space_cardinalities, axis=1)
 
-    return (observations_space_dim_count, preprocess_obs, sum(action_space_cardinalities), postprocess_preds)
+    return (observations_space_dim_count, preprocess_obs, sum(action_space_cardinalities), postprocess_preds, len(action_space_cardinalities))
 
 
 def calculate_gae(*, hparams, ADVANTAGE_LAMBDA, rewards, episode_dones, predicted_values, episode_done, last_v_logit):
@@ -166,7 +168,7 @@ def main(*, hparams, random_name=''):
     writer = tf.contrib.summary.create_file_writer(log_dir_name)
     rl_writer = tf.contrib.summary.create_file_writer(log_dir_name + 'rl')
 
-    observations_space_dim_count, preprocess_obs, action_space_cardinality, postprocess_preds = get_transformations(
+    observations_space_dim_count, preprocess_obs, action_space_cardinality, postprocess_preds, subactions_count = get_transformations(
         env)
 
     pv_model = P_and_V_Model(classes=action_space_cardinality, mlp_layers=hparams['MLP_LAYERS'],
@@ -202,6 +204,7 @@ def main(*, hparams, random_name=''):
                     preprocess_obs([observation]))
                 action, neg_log_p_ac = get_actions_and_neglogp(
                     p_logits, postprocess_preds)
+                action = [a.numpy()[0] for a in action]
 
                 # gym envs overwrite observations
                 observations.append(observation.copy())
@@ -210,8 +213,11 @@ def main(*, hparams, random_name=''):
                 predicted_values.append(v_logit)
                 neg_log_p_ac_s.append(neg_log_p_ac)
 
-                observation, reward, episode_done, infos = env.step(
-                    [a.numpy()[0] for a in action])
+                if subactions_count == 1:
+                    observation, reward, episode_done, infos = env.step(
+                        action[0])
+                else:
+                    observation, reward, episode_done, infos = env.step(action)
                 rewards.append(reward)
                 total_reward += reward
                 if (hparams['RENDER']):
