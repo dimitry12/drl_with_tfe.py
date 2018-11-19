@@ -25,5 +25,7 @@ Implementations of deep reinforcement learning algorithms with Tensorflow Eager,
 
 # Results
 - `CartPole-v0`:
-  - PPO requires higher advantage-lambda and gamma,
-    yet isn't very sensitive to value-lambda
+  - PPO:
+    - solved: takes under 100K environment steps on average
+    - prefers higher advantage-lambda and gamma,
+      yet isn't very sensitive to value-lambda (though see https://github.com/dimitry12/drl_with_tfe.py/issues/15)
