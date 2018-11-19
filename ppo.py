@@ -29,9 +29,16 @@ def get_actions_and_neglogp(p_logits, postprocess_preds, actions=None):
         actions = tf.split(actions, actions.shape[1], axis=1)
         actions = [tf.reshape(a, (a.shape[0],)) for a in actions]
 
+    # cross-entropy of:
+    # - exclusive discrete label, and
+    # - categorical logits
+    # is the negative log of the probability of the
+    # "true" label, within the categorical distribution
+    # defined by these logits
     def neg_log_p_ac_func(p, a):
         return tf.nn.sparse_softmax_cross_entropy_with_logits(logits=p, labels=a)
 
+    # this gives us $-log (\sum p_i)$ - the probability of the "full" taken action
     neg_log_p_ac = tf.add_n([neg_log_p_ac_func(_p_logits, _action)
                              for _p_logits, _action in zip(p_logits, actions)])
 
@@ -310,6 +317,13 @@ def main(*, hparams, random_name=''):
                         # relative to the probability of the *taken* action.
                         # Updated policy may offer very different distribution
                         # over untaken actions.
+                        #
+                        # This expression works, because CLIP objectaive contains
+                        # ratio of *probabilities* (updated vs old), and:
+                        # $e^{\log p_{new} - \log p_{old}} = \frac{p_{new}}{p_{old}}$
+                        #
+                        # If environment requires joint actions, then sum of neg_log_p_ac's
+                        # offers us the ratio of *conjugate* probabilities of "full" actions.
                         ratio = tf.exp(old_neg_log_p_ac_s_batch - neg_log_p_ac)
 
                         pg_losses = advantages_batch * ratio
